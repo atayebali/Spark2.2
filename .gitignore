@@ -1,4 +1,5 @@
 .idea/
 target/
 derby.log
-metastore
+metastore_*
+data
