@@ -3,3 +3,5 @@ target/
 derby.log
 metastore_*
 data
+*.jar
+.DS_Store

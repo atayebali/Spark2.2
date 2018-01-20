@@ -19,12 +19,15 @@ object FriendsByName {
   /** Our main function where the action happens */
   def main(args: Array[String]) {
 
+
+
     // Set the log level to only print errors
     Logger.getLogger("org").setLevel(Level.ERROR)
 
     // Create a SparkContext using every core of the local machine
     val sc = new SparkContext("local[*]", "FriendsByName")
 
+    println(sc.version)
     // Load each line of the source data into an RDD
     val lines = sc.textFile("../SparkScala/fakefriends.csv")
 
