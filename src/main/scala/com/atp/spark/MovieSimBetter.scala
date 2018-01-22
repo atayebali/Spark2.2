@@ -2,13 +2,14 @@ package com.atp.spark
 
 import org.apache.spark._
 //import org.apache.spark.SparkContext.
-import org.apache.log4j._
-import scala.io.Source
 import java.nio.charset.CodingErrorAction
-import scala.io.Codec
+
+import org.apache.log4j._
+
+import scala.io.{Codec, Source}
 import scala.math.sqrt
 
-object MovieSim {
+object MovieSimBetter {
 
   /** Load up a Map of movie IDs to movie names. */
   def loadMovieNames() : Map[Int, String] = {
@@ -101,10 +102,13 @@ object MovieSim {
     val data = sc.textFile("../ml-100k/u.data")
 
     // Map ratings to key / value pairs: user ID => movie ID, rating
-    val ratings = data.map(l => l.split("\t")).map(l => (l(0).toInt, (l(1).toInt, l(2).toDouble)))
+    val raw_ratings = data.map(l => l.split("\t")).map(l => (l(0).toInt, (l(1).toInt, l(2).toDouble)))
 
     // Emit every movie rated together by the same user.
     // Self-join to find every combination.
+
+    //Only grab good movies
+    val ratings = raw_ratings.filter(x => (x._2._2 > 3.0))
     val joinedRatings = ratings.join(ratings)
 
     // At this point our RDD consists of userID => ((movieID, rating), (movieID, rating))
@@ -129,37 +133,37 @@ object MovieSim {
 
     // Extract similarities for the movie we care about that are "good".
 
-    if (args.length > 0) {
-      val scoreThreshold = 0.97
-      val coOccurenceThreshold = 50.0
 
-      val movieID:Int = args(0).toInt
+    val scoreThreshold = 0.97
+    val coOccurenceThreshold = 50.0
+    var movieID:Int = 50
 
-      // Filter for movies with this sim that are "good" as defined by
-      // our quality thresholds above
+    if (args.length > 0){ movieID = args(0).toInt }
 
-      val filteredResults = moviePairSimilarities.filter( x =>
-      {
-        val pair = x._1
-        val sim = x._2
-        (pair._1 == movieID || pair._2 == movieID) && sim._1 > scoreThreshold && sim._2 > coOccurenceThreshold
+    // Filter for movies with this sim that are "good" as defined by
+    // our quality thresholds above
+
+    val filteredResults = moviePairSimilarities.filter( x =>
+    {
+      val pair = x._1
+      val sim = x._2
+      (pair._1 == movieID || pair._2 == movieID) && sim._1 > scoreThreshold && sim._2 > coOccurenceThreshold
+    }
+    )
+
+    // Sort by quality score.
+    val results = filteredResults.map( x => (x._2, x._1)).sortByKey(false).take(10)
+
+    println("\nTop 10 similar movies for " + nameDict(movieID))
+    for (result <- results) {
+      val sim = result._1
+      val pair = result._2
+      // Display the similarity result that isn't the movie we're looking at
+      var similarMovieID = pair._1
+      if (similarMovieID == movieID) {
+        similarMovieID = pair._2
       }
-      )
-
-      // Sort by quality score.
-      val results = filteredResults.map( x => (x._2, x._1)).sortByKey(false).take(10)
-
-      println("\nTop 10 similar movies for " + nameDict(movieID))
-      for (result <- results) {
-        val sim = result._1
-        val pair = result._2
-        // Display the similarity result that isn't the movie we're looking at
-        var similarMovieID = pair._1
-        if (similarMovieID == movieID) {
-          similarMovieID = pair._2
-        }
-        println(nameDict(similarMovieID) + "\tscore: " + sim._1 + "\tstrength: " + sim._2)
-      }
+      println(nameDict(similarMovieID) + "\tscore: " + sim._1 + "\tstrength: " + sim._2)
     }
   }
 }
