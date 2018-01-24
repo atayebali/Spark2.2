@@ -87,6 +87,21 @@ object MovieSimBetter {
     return (score, numPairs)
   }
 
+  def computeJaccardSimilarity(ratingPairs: RatingPairs): (Double, Int) = {
+    val total: Int = ratingPairs.size
+    val m1 = ratingPairs.map(x => x._1).toArray
+    val m2 = ratingPairs.map(x => x._2).toArray
+    val intersect = m1.intersect(m2).distinct
+
+    val union = m1.union(m2).distinct
+
+    var score: Double = 0.0
+    val den: Double = union.length
+
+    if (den != 0) { score = intersect.length.toDouble/union.length.toDouble }
+    return(score, total)
+  }
+
   /** Our main function where the action happens */
   def main(args: Array[String]) {
 
@@ -108,7 +123,7 @@ object MovieSimBetter {
     // Self-join to find every combination.
 
     //Only grab good movies
-    val ratings = raw_ratings.filter(x => (x._2._2 > 3.0))
+    val ratings = raw_ratings.filter(x => (x._2._2 >= 3.0))
     val joinedRatings = ratings.join(ratings)
 
     // At this point our RDD consists of userID => ((movieID, rating), (movieID, rating))
@@ -125,7 +140,8 @@ object MovieSimBetter {
 
     // We now have (movie1, movie2) = > (rating1, rating2), (rating1, rating2) ...
     // Can now compute similarities.
-    val moviePairSimilarities = moviePairRatings.mapValues(computeCosineSimilarity).cache()
+    val moviePairSimilarities = moviePairRatings.mapValues(computeJaccardSimilarity).cache()
+
 
     //Save the results if desired
     //val sorted = moviePairSimilarities.sortByKey()
