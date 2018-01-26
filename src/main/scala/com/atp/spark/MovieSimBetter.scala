@@ -1,9 +1,11 @@
 package com.atp.spark
 
+import com.atp.spark.DegreesOfSeparation.hitCounter
 import org.apache.spark._
+import org.apache.spark.util.LongAccumulator
 //import org.apache.spark.SparkContext.
 import java.nio.charset.CodingErrorAction
-
+import scala.util.control.Breaks._
 import org.apache.log4j._
 
 import scala.io.{Codec, Source}
@@ -11,8 +13,9 @@ import scala.math.sqrt
 
 object MovieSimBetter {
 
+  var hitCounter:Option[LongAccumulator] = None
   /** Load up a Map of movie IDs to movie names. */
-  def loadMovieNames() : Map[Int, String] = {
+  def loadMovieNames() : Map[Int, Array[String]] = {
 
     // Handle character encoding issues:
     implicit val codec = Codec("UTF-8")
@@ -20,17 +23,28 @@ object MovieSimBetter {
     codec.onUnmappableCharacter(CodingErrorAction.REPLACE)
 
     // Create a Map of Ints to Strings, and populate it from u.item.
-    var movieNames:Map[Int, String] = Map()
+    var movieNames:Map[Int, Array[String]] = Map()
 
     val lines = Source.fromFile("../ml-100k/u.item").getLines()
     for (line <- lines) {
       var fields = line.split('|')
       if (fields.length > 1) {
-        movieNames += (fields(0).toInt -> fields(1))
+        movieNames += (fields(0).toInt -> pluckRatings(fields.drop(1)))
       }
     }
 
     return movieNames
+  }
+
+  def pluckRatings(movieData: Array[String]): Array[String] = {
+    var movieInfo: Array[String] = Array()
+    movieInfo  = movieInfo :+ movieData(0)
+    val genre = movieData.drop(4)
+
+    for(i <- 0 until genre.length){
+      if( genre(i).toInt > 0 ) { movieInfo = movieInfo :+ i.toString }
+    }
+    return movieInfo
   }
 
   type MovieRating = (Int, Double)
@@ -108,12 +122,15 @@ object MovieSimBetter {
     // Set the log level to only print errors
     Logger.getLogger("org").setLevel(Level.ERROR)
 
+
     // Create a SparkContext using every core of the local machine
     val sc = new SparkContext("local[*]", "MovieSimilarities")
-
+    hitCounter = Some(sc.longAccumulator("Hit Counter"))
     println("\nLoading movie names...")
-    val nameDict = loadMovieNames()
 
+    //Dict = (12 -> ('Hello", '10/10.2012', 'url:asdfas', '0', '0', '0', '0')
+
+    val nameDict = loadMovieNames()
     val data = sc.textFile("../ml-100k/u.data")
 
     // Map ratings to key / value pairs: user ID => movie ID, rating
@@ -140,8 +157,7 @@ object MovieSimBetter {
 
     // We now have (movie1, movie2) = > (rating1, rating2), (rating1, rating2) ...
     // Can now compute similarities.
-    val moviePairSimilarities = moviePairRatings.mapValues(computeJaccardSimilarity).cache()
-
+    val moviePairSimilarities = moviePairRatings.mapValues(computeCosineSimilarity).cache()
 
     //Save the results if desired
     //val sorted = moviePairSimilarities.sortByKey()
@@ -156,6 +172,8 @@ object MovieSimBetter {
 
     if (args.length > 0){ movieID = args(0).toInt }
 
+
+
     // Filter for movies with this sim that are "good" as defined by
     // our quality thresholds above
 
@@ -168,18 +186,48 @@ object MovieSimBetter {
     )
 
     // Sort by quality score.
-    val results = filteredResults.map( x => (x._2, x._1)).sortByKey(false).take(10)
+    val results = filteredResults.map( x => (x._2, x._1)).sortByKey(false)
 
-    println("\nTop 10 similar movies for " + nameDict(movieID))
-    for (result <- results) {
-      val sim = result._1
-      val pair = result._2
-      // Display the similarity result that isn't the movie we're looking at
-      var similarMovieID = pair._1
-      if (similarMovieID == movieID) {
-        similarMovieID = pair._2
+    println("\nTop 10 similar movies for " + nameDict(movieID)(0))
+
+
+
+      for (result <- results) {
+        val (sim, pair) = (result._1, result._2)
+        // Display the similarity result that isn't the movie we're looking at
+        var similarMovieID = pair._1
+        if (similarMovieID == movieID) {
+          similarMovieID = pair._2
+        }
+
+
+        val originalMovieInfo = nameDict(movieID)
+
+        if ( compareGenre(originalMovieInfo, nameDict(similarMovieID)) & (hitCounter.get.value < 10 ) ) {
+          println(nameDict(similarMovieID)(0) + "\tscore: " + sim._1 + "\tstrength: " + sim._2)
+          if (hitCounter.isDefined) { hitCounter.get.add(1)}
+        }
       }
-      println(nameDict(similarMovieID) + "\tscore: " + sim._1 + "\tstrength: " + sim._2)
-    }
+  }
+  def compareGenre(original: Array[String], newmovie: Array[String]): Boolean = {
+    val originalGen = original.drop(1)
+    val newGen = newmovie.drop(1)
+//    println(s" original: ${originalGen.mkString(" ")}")
+//    println(s" newGem: ${newGen.mkString(" " )}")
+
+    return (originalGen.intersect(newGen).length >= 1)
   }
 }
+
+
+/*
+
+b = Array(0, 1, 1)
+
+for(i <- 0  until b.length){
+  if (b(i).toInt > 0) {
+    gen :+ i
+  }
+}
+
+ */
