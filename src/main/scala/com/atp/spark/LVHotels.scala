@@ -4,6 +4,7 @@ package com.atp.spark
 import org.apache.spark.SparkContext._
 import org.apache.spark.sql._
 import org.apache.log4j._
+import org.apache.spark.sql.functions._
 
 
 object LVHotels {
@@ -13,7 +14,11 @@ object LVHotels {
     Logger.getLogger("org").setLevel(Level.ERROR)
 
     //Create Session
-    val spark = new SparkSession("local[*]", "Hotels in LV" )
+    val spark = SparkSession.builder
+    .appName("PopularMovies")
+      .master("local[*]")
+      .getOrCreate()
+
 
     //Spin up a DF
     val df = spark.read.format("csv")
