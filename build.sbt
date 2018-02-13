@@ -9,6 +9,7 @@ scalaVersion := "2.11.8"
 
 libraryDependencies ++= Seq(
   sparkPackage %% "spark-core" % sparkVersion,
+  sparkPackage %% "spark-mllib" % sparkVersion,
   sparkPackage %% "spark-sql" % sparkVersion //For spark 2.2.0 I need to include this for sparkSession to work.
 )
 
